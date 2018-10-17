@@ -7,7 +7,7 @@ homepage = "https://github.com/frugalos/cannyls_rpc"
 repository = "https://github.com/frugalos/cannyls_rpc"
 readme = "README.md"
 keywords = ["RPC"]
-categories = ["asynchronous", "network programming"]
+categories = ["asynchronous", "network-programming"]
 license = "MIT"
 
 [badges]
