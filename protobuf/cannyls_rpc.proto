@@ -1,0 +1,156 @@
+///
+/// CannylsのRPC用のスキーマ定義
+///
+syntax = "proto3";
+
+// https://github.com/google/protobuf/blob/master/src/google/protobuf/duration.proto
+import "google/protobuf/duration.proto";
+
+// https://github.com/sile/protobuf_codec/blob/master/protobuf/trackable.proto
+import "protobuf_codec/protobuf/trackable.proto";
+
+package cannyls_rpc.protobuf;
+
+// 128ビット幅のLumpId.
+message LumpId {
+  // 上位64ビット.
+  fixed64 high = 1;
+
+  // 下位64ビット.
+  fixed64 low = 2;
+}
+
+/// リクエスト処理のデッドライン(優先順位).
+message Deadline {
+  enum Type {
+    INFINITY = 0;
+    WITHIN = 1;
+    IMMEDIATE = 2;
+  }
+  Type type = 1;
+
+  // デッドラインまでの残り時間(現在時刻からの相対時間).
+  //
+  // `type=WITHIN`の場合以外には、存在していても無視される.
+  //
+  // 省略時には「0秒」として扱われる.
+  // また、秒ないしナノ秒部分が負数、の場合にはエラー扱いとなる.
+  google.protobuf.Duration duration = 2;
+}
+
+// RPCリクエストのオプション.
+message RequestOptions {
+  // リクエスト処理のデッドライン(優先順位).
+  //
+  // 省略された場合には`Deadline::Infinity`として扱われる.
+  Deadline deadline = 1;
+
+  // デバイスのコマンドのキューの長さ制限.
+  //
+  // リクエスト処理時に、対象デバイスのキューの長さがこの値に達している場合には、Busyエラーが返される.
+  //
+  // なお値が`0`の場合には「無制限」とみなされる.
+  uint32 queue_size_limit = 2;
+}
+
+// Lumpに対するリクエスト(PUT以外).
+message LumpRequest {
+  // 対象デバイスのID.
+  string device_id = 1;
+
+  // 対象lumpのID.
+  LumpId lump_id = 2;
+
+  // オプション.
+  RequestOptions options = 3;
+}
+
+// LumpのPUTリクエスト.
+message PutLumpRequest {
+  // 対象デバイスのID.
+  string device_id = 1;
+
+  // 対象lumpのID.
+  LumpId lump_id = 2;
+
+  // Lumpのデータ.
+  bytes lump_data = 3;
+
+  // オプション.
+  RequestOptions options = 4;
+}
+
+// `GetLumpRpc`の応答.
+message GeLumpResponse {
+  // 対象lumpが存在しない場合には、フィールドが省略される.
+  oneof result {
+    bytes lump_data = 1;
+    Error error = 2;
+  }
+}
+
+// `HeadLumpRpc`の応答.
+message HeadLumpResponse {
+  // 対象lumpが存在しない場合には、フィールドが省略される.
+  oneof result {
+    uint32 approximate_data_size = 1; // lumpのデータサイズの近似値
+    Error error = 2;
+  }
+}
+
+// `PutLumpRpc`の応答.
+message PutLumpResponse {
+  oneof result {
+    bool created = 1; // 新規作成なら`true`、上書きなら`false`
+    Error error = 2;
+  }
+}
+
+// `DeleteLumpRpc`の応答.
+message DeleteLumpResponse {
+  oneof result {
+    bool deleted = 1; // 削除されたなら`true`、存在しなかったなら`false`
+    Error error = 2;
+  }
+}
+
+// デバイスに対するリクエスト.
+message DeviceRequest {
+  // 対象デバイスのID.
+  string device_id = 1;
+
+  // オプション.
+  RequestOptions options = 2;
+}
+
+// `ListLumpRpc`の応答.
+//
+// [NOTE]
+//
+// `oneof`を使っていないのは、それが`repeated`と直接は組み合わせられないため.
+//
+// 現状のRustライブラリの実装上、一段メッセージを挟んで`repeated`(と`oneof`)を
+// 使うようにすると(送信時に)無駄なメモリコピーが発生してしまう.
+//
+// lumpの数は多い場合には数千万以上となることが予想され、
+// 無視できないコストとなる可能性があるので、
+// この応答メッセージに関しては、フラットな構造となるようにした.
+message ListLumpResponse {
+  // 対象デバイスが保持するlumpのID一覧.
+  //
+  // エラー発生時には空となる.
+  repeated LumpId lump_ids = 1;
+
+  // エラー情報.
+  //
+  // 成功応答時には省略される.
+  Error error = 2;
+}
+
+
+// `cannyls`固有のエラーメッセージ.
+//
+// `kind`フィールドの値として`cannyls::ErrorKind`の文字列表現を保持する.
+message Error {
+  protobuf_codec.protobuf.trackable.Error error = 1;
+}
