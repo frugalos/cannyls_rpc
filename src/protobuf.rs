@@ -347,21 +347,31 @@ impl Decode for PutLumpRequestFieldsDecoder {
 }
 impl FieldDecode for PutLumpRequestFieldsDecoder {
     fn start_decoding(&mut self, tag: Tag) -> Result<bool> {
-        if track!(self.device_id.start_decoding(tag))? {
+        let started = track!(self.device_id.start_decoding(tag))?;
+        if started {
             self.index = 1;
-            Ok(true)
-        } else if track!(self.lump_id.start_decoding(tag))? {
-            self.index = 2;
-            Ok(true)
-        } else if track!(self.lump_data.start_decoding(tag))? {
-            self.index = 3;
-            Ok(true)
-        } else if track!(self.options.start_decoding(tag))? {
-            self.index = 4;
-            Ok(true)
-        } else {
-            Ok(false)
+            return Ok(true);
         }
+
+        let started = track!(self.lump_id.start_decoding(tag))?;
+        if started {
+            self.index = 2;
+            return Ok(true);
+        }
+
+        let started = track!(self.lump_data.start_decoding(tag))?;
+        if started {
+            self.index = 3;
+            return Ok(true);
+        }
+
+        let started = track!(self.options.start_decoding(tag))?;
+        if started {
+            self.index = 4;
+            return Ok(true);
+        }
+
+        Ok(false)
     }
 }
 
@@ -411,7 +421,7 @@ impl LumpDataDecoder {
     }
 
     fn device_hint(&mut self, device_id: &str) {
-        self.device_hint = self.registry.get_device(device_id).ok().map(|d| d.clone());
+        self.device_hint = self.registry.get_device(device_id).ok();
     }
 }
 impl Decode for LumpDataDecoder {
