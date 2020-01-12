@@ -1,9 +1,11 @@
 use cannyls::deadline::Deadline;
 use cannyls::lump::{LumpData, LumpHeader, LumpId};
+use cannyls::storage::StorageUsage;
 use cannyls::{Error, ErrorKind, Result};
 use fibers_rpc::{self, Call};
 use futures::{Async, Future, Poll};
 use std::net::SocketAddr;
+use std::ops::Range;
 use trackable::error::ErrorKindExt;
 
 use device::DeviceId;
@@ -180,6 +182,29 @@ impl<'a> RequestBuilder<'a> {
 
         let request = rpc::DeviceRequest {
             device_id,
+            options: self.request_options(),
+        };
+        Response::new(self.client.server, client.call(self.client.server, request))
+    }
+
+    /// lumpの範囲を指定してデバイスのストレージ使用量を取得する.
+    ///
+    /// # Errors
+    ///
+    /// 例えば、以下のようなエラーが返されることがある:
+    /// - 指定されたデバイスが存在しない場合には`ErrorKind::InvalidInput`
+    /// - 指定されたデバイスが現在利用不可能な場合には`ErrorKind::DeviceBusy`
+    pub fn usage_range(
+        &self,
+        device_id: DeviceId,
+        range: Range<LumpId>,
+    ) -> impl Future<Item = StorageUsage, Error = Error> {
+        let mut client = rpc::UsageRangeRpc::client(&self.client.rpc_service);
+        *client.options_mut() = self.rpc_options.clone();
+
+        let request = rpc::UsageRangeRequest {
+            device_id,
+            range,
             options: self.request_options(),
         };
         Response::new(self.client.server, client.call(self.client.server, request))
