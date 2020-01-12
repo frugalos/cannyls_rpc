@@ -160,6 +160,45 @@ impl_sized_message_encode!(DeadlineEncoder, Deadline, |item: Self::Item| match i
 });
 
 #[derive(Debug, Default)]
+pub struct StorageUsageDecoder {
+    inner: MessageDecoder<
+        Fields<(
+            MaybeDefault<FieldDecoder<F1, Uint32Decoder>>,
+            MaybeDefault<FieldDecoder<F2, Uint32Decoder>>,
+        )>,
+    >,
+}
+impl_message_decode!(StorageUsageDecoder, StorageUsage, |(kind, usage)| Ok(
+    match kind {
+        0 => StorageUsage::Unknown,
+        1 => StorageUsage::Approximate(usage),
+        _ => track_panic!(
+            ErrorKind::InvalidInput,
+            "Unknown storage usage type: {}",
+            kind
+        ),
+    }
+));
+
+#[derive(Debug, Default)]
+pub struct StorageUsageEncoder {
+    inner: MessageEncoder<
+        Fields<(
+            FieldEncoder<F1, Uint32Encoder>,
+            MaybeDefault<FieldEncoder<F2, Uint32Encoder>>,
+        )>,
+    >,
+}
+impl_sized_message_encode!(
+    StorageUsageEncoder,
+    StorageUsage,
+    |item: Self::Item| match item {
+        StorageUsage::Unknown => (0, Default::default()),
+        StorageUsage::Approximate(n) => (1, n),
+    }
+);
+
+#[derive(Debug, Default)]
 pub struct RequestOptionsDecoder {
     inner: MessageDecoder<
         Fields<(
@@ -745,7 +784,7 @@ impl_message_encode!(
 pub struct UsageRangeResponseDecoder {
     inner: MessageDecoder<
         Fields<(
-            MaybeDefault<FieldDecoder<F1, Uint32Decoder>>,
+            MaybeDefault<MessageFieldDecoder<F1, StorageUsageDecoder>>,
             Optional<MessageFieldDecoder<F2, ErrorDecoder>>,
         )>,
     >,
@@ -756,7 +795,7 @@ impl_message_decode!(
     |(usage, error)| if let Some(error) = error {
         Ok(Err(error))
     } else {
-        Ok(Ok(StorageUsage::new(usage)))
+        Ok(Ok(usage))
     }
 );
 
@@ -764,7 +803,7 @@ impl_message_decode!(
 pub struct UsageRangeResponseEncoder {
     inner: MessageEncoder<
         Fields<(
-            MaybeDefault<FieldEncoder<F1, Uint32Encoder>>,
+            MessageFieldEncoder<F1, StorageUsageEncoder>,
             Optional<MessageFieldEncoder<F2, ErrorEncoder>>,
         )>,
     >,
@@ -774,7 +813,7 @@ impl_sized_message_encode!(
     cannyls::Result<StorageUsage>,
     |item: Self::Item| match item {
         Err(e) => (Default::default(), Some(e)),
-        Ok(usage) => (usage.as_bytes(), None),
+        Ok(usage) => (usage, None),
     }
 );
 
