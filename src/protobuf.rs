@@ -3,7 +3,7 @@
 //! メッセージ定義は[cannyls_rpc.proto]を参照のこと.
 //!
 //! [cannyls_rpc.proto]: https://github.com/frugalos/cannyls_rpc/blob/master/protobuf/cannyls_rpc.proto
-#![cfg_attr(feature = "cargo-clippy", allow(type_complexity))]
+#![cfg_attr(feature = "cargo-clippy", allow(clippy::type_complexity))]
 use bytecodec::bytes::BytesDecoder as BytecodecBytesDecoder;
 use bytecodec::combinator::{Peekable, PreEncode};
 use bytecodec::{self, ByteCount, Decode, Encode, Eos, ErrorKind, Result, SizedEncode};
