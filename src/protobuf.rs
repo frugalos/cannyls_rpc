@@ -23,7 +23,8 @@ use protobuf_codec::field::{
 use protobuf_codec::message::{MessageDecode, MessageDecoder, MessageEncode, MessageEncoder};
 use protobuf_codec::scalar::{
     BoolDecoder, BoolEncoder, BytesDecoder, BytesEncoder, CustomBytesDecoder, Fixed64Decoder,
-    Fixed64Encoder, StringDecoder, StringEncoder, Uint32Decoder, Uint32Encoder,
+    Fixed64Encoder, StringDecoder, StringEncoder, Uint32Decoder, Uint32Encoder, Uint64Decoder,
+    Uint64Encoder,
 };
 use protobuf_codec::wellknown::google::protobuf::{StdDurationDecoder, StdDurationEncoder};
 use protobuf_codec::wellknown::protobuf_codec::protobuf::trackable;
@@ -163,8 +164,8 @@ impl_sized_message_encode!(DeadlineEncoder, Deadline, |item: Self::Item| match i
 pub struct StorageUsageDecoder {
     inner: MessageDecoder<
         Fields<(
-            MaybeDefault<FieldDecoder<F1, Uint32Decoder>>,
-            MaybeDefault<FieldDecoder<F2, Uint32Decoder>>,
+            MaybeDefault<FieldDecoder<F1, Uint64Decoder>>,
+            MaybeDefault<FieldDecoder<F2, Uint64Decoder>>,
         )>,
     >,
 }
@@ -184,8 +185,8 @@ impl_message_decode!(StorageUsageDecoder, StorageUsage, |(kind, usage)| Ok(
 pub struct StorageUsageEncoder {
     inner: MessageEncoder<
         Fields<(
-            FieldEncoder<F1, Uint32Encoder>,
-            MaybeDefault<FieldEncoder<F2, Uint32Encoder>>,
+            FieldEncoder<F1, Uint64Encoder>,
+            MaybeDefault<FieldEncoder<F2, Uint64Encoder>>,
         )>,
     >,
 }
