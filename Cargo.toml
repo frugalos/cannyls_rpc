@@ -16,7 +16,7 @@ travis-ci = {repository = "frugalos/cannyls_rpc"}
 [dependencies]
 atomic_immut = "0.1"
 bytecodec = "0.4"
-cannyls = "0.9"
+cannyls = "0.9.4"
 factory = "0.1"
 fibers = "0.1"
 fibers_rpc = "0.2"
@@ -27,6 +27,3 @@ trackable = "0.2"
 
 [dev-dependencies]
 tempdir = "0.3"
-
-[patch.crates-io]
-cannyls = { path = "../cannyls" }
