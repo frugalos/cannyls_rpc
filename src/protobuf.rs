@@ -3,7 +3,7 @@
 //! メッセージ定義は[cannyls_rpc.proto]を参照のこと.
 //!
 //! [cannyls_rpc.proto]: https://github.com/frugalos/cannyls_rpc/blob/master/protobuf/cannyls_rpc.proto
-#![cfg_attr(feature = "cargo-clippy", allow(type_complexity))]
+#![cfg_attr(feature = "cargo-clippy", allow(clippy::type_complexity))]
 use bytecodec::bytes::BytesDecoder as BytecodecBytesDecoder;
 use bytecodec::combinator::{Peekable, PreEncode};
 use bytecodec::{self, ByteCount, Decode, Encode, Eos, ErrorKind, Result, SizedEncode};
@@ -12,6 +12,7 @@ use cannyls::block::BlockSize;
 use cannyls::deadline::Deadline;
 use cannyls::device::DeviceHandle;
 use cannyls::lump::{LumpData, LumpHeader, LumpId};
+use cannyls::storage::StorageUsage;
 use factory::Factory;
 use protobuf_codec::field::branch::Branch2;
 use protobuf_codec::field::num::{F1, F2, F3, F4};
@@ -22,15 +23,17 @@ use protobuf_codec::field::{
 use protobuf_codec::message::{MessageDecode, MessageDecoder, MessageEncode, MessageEncoder};
 use protobuf_codec::scalar::{
     BoolDecoder, BoolEncoder, BytesDecoder, BytesEncoder, CustomBytesDecoder, Fixed64Decoder,
-    Fixed64Encoder, StringDecoder, StringEncoder, Uint32Decoder, Uint32Encoder,
+    Fixed64Encoder, StringDecoder, StringEncoder, Uint32Decoder, Uint32Encoder, Uint64Decoder,
+    Uint64Encoder,
 };
 use protobuf_codec::wellknown::google::protobuf::{StdDurationDecoder, StdDurationEncoder};
 use protobuf_codec::wellknown::protobuf_codec::protobuf::trackable;
 use protobuf_codec::wire::Tag;
 use std;
+use std::ops::Range;
 use trackable::error::{ErrorKindExt, TrackableError};
 
-use rpc::{DeviceRequest, LumpRequest, PutLumpRequest, RequestOptions};
+use rpc::{DeviceRequest, LumpRequest, PutLumpRequest, RequestOptions, UsageRangeRequest};
 use {DeviceId, DeviceRegistryHandle};
 
 macro_rules! impl_message_decode {
@@ -158,6 +161,45 @@ impl_sized_message_encode!(DeadlineEncoder, Deadline, |item: Self::Item| match i
 });
 
 #[derive(Debug, Default)]
+pub struct StorageUsageDecoder {
+    inner: MessageDecoder<
+        Fields<(
+            MaybeDefault<FieldDecoder<F1, Uint64Decoder>>,
+            MaybeDefault<FieldDecoder<F2, Uint64Decoder>>,
+        )>,
+    >,
+}
+impl_message_decode!(StorageUsageDecoder, StorageUsage, |(kind, usage)| Ok(
+    match kind {
+        0 => StorageUsage::Unknown,
+        1 => StorageUsage::Approximate(usage),
+        _ => track_panic!(
+            ErrorKind::InvalidInput,
+            "Unknown storage usage type: {}",
+            kind
+        ),
+    }
+));
+
+#[derive(Debug, Default)]
+pub struct StorageUsageEncoder {
+    inner: MessageEncoder<
+        Fields<(
+            FieldEncoder<F1, Uint64Encoder>,
+            MaybeDefault<FieldEncoder<F2, Uint64Encoder>>,
+        )>,
+    >,
+}
+impl_sized_message_encode!(
+    StorageUsageEncoder,
+    StorageUsage,
+    |item: Self::Item| match item {
+        StorageUsage::Unknown => (0, Default::default()),
+        StorageUsage::Approximate(n) => (1, n),
+    }
+);
+
+#[derive(Debug, Default)]
 pub struct RequestOptionsDecoder {
     inner: MessageDecoder<
         Fields<(
@@ -166,21 +208,20 @@ pub struct RequestOptionsDecoder {
         )>,
     >,
 }
-impl_message_decode!(
-    RequestOptionsDecoder,
-    RequestOptions,
-    |(deadline, queue_size_limit)| {
-        let max_queue_len = if queue_size_limit == 0 {
-            None
-        } else {
-            Some(queue_size_limit as usize - 1)
-        };
-        Ok(RequestOptions {
-            deadline,
-            max_queue_len,
-        })
-    }
-);
+impl_message_decode!(RequestOptionsDecoder, RequestOptions, |(
+    deadline,
+    queue_size_limit,
+)| {
+    let max_queue_len = if queue_size_limit == 0 {
+        None
+    } else {
+        Some(queue_size_limit as usize - 1)
+    };
+    Ok(RequestOptions {
+        deadline,
+        max_queue_len,
+    })
+});
 
 #[derive(Debug, Default)]
 pub struct RequestOptionsEncoder {
@@ -206,15 +247,15 @@ pub struct LumpRequestDecoder {
         )>,
     >,
 }
-impl_message_decode!(
-    LumpRequestDecoder,
-    LumpRequest,
-    |(device_id, lump_id, options)| Ok(LumpRequest {
-        device_id: DeviceId::new(device_id),
-        lump_id,
-        options,
-    })
-);
+impl_message_decode!(LumpRequestDecoder, LumpRequest, |(
+    device_id,
+    lump_id,
+    options,
+)| Ok(LumpRequest {
+    device_id: DeviceId::new(device_id),
+    lump_id,
+    options,
+}));
 
 #[derive(Debug, Default)]
 pub struct LumpRequestEncoder {
@@ -441,7 +482,8 @@ impl Decode for LumpDataDecoder {
                 track!(device.allocate_lump_data(data_size))
             } else {
                 track!(LumpData::new(vec![0; data_size]))
-            }.map_err(|e| ErrorKind::InvalidInput.takes_over(e))?;
+            }
+            .map_err(|e| ErrorKind::InvalidInput.takes_over(e))?;
             self.bytes = BytecodecBytesDecoder::new(data);
         }
         track!(self.bytes.decode(buf, eos))
@@ -633,14 +675,13 @@ pub struct DeviceRequestDecoder {
         )>,
     >,
 }
-impl_message_decode!(
-    DeviceRequestDecoder,
-    DeviceRequest,
-    |(device_id, options)| Ok(DeviceRequest {
-        device_id: DeviceId::new(device_id),
-        options,
-    })
-);
+impl_message_decode!(DeviceRequestDecoder, DeviceRequest, |(
+    device_id,
+    options,
+)| Ok(DeviceRequest {
+    device_id: DeviceId::new(device_id),
+    options,
+}));
 
 #[derive(Debug, Default)]
 pub struct DeviceRequestEncoder {
@@ -657,6 +698,52 @@ impl_sized_message_encode!(DeviceRequestEncoder, DeviceRequest, |item: Self::Ite
 ));
 
 #[derive(Debug, Default)]
+pub struct UsageRangeRequestDecoder {
+    inner: MessageDecoder<
+        Fields<(
+            MaybeDefault<FieldDecoder<F1, StringDecoder>>,
+            MessageFieldDecoder<F2, LumpIdDecoder>,
+            MessageFieldDecoder<F3, LumpIdDecoder>,
+            MessageFieldDecoder<F4, RequestOptionsDecoder>,
+        )>,
+    >,
+}
+impl_message_decode!(UsageRangeRequestDecoder, UsageRangeRequest, |(
+    device_id,
+    start,
+    end,
+    options,
+)| Ok(
+    UsageRangeRequest {
+        device_id: DeviceId::new(device_id),
+        range: Range { start, end },
+        options,
+    }
+));
+
+#[derive(Debug, Default)]
+pub struct UsageRangeRequestEncoder {
+    inner: MessageEncoder<
+        Fields<(
+            MaybeDefault<FieldEncoder<F1, StringEncoder>>,
+            MessageFieldEncoder<F2, LumpIdEncoder>,
+            MessageFieldEncoder<F3, LumpIdEncoder>,
+            MessageFieldEncoder<F4, RequestOptionsEncoder>,
+        )>,
+    >,
+}
+impl_sized_message_encode!(
+    UsageRangeRequestEncoder,
+    UsageRangeRequest,
+    |item: Self::Item| (
+        item.device_id.into_string(),
+        item.range.start,
+        item.range.end,
+        item.options,
+    )
+);
+
+#[derive(Debug, Default)]
 pub struct ListLumpResponseDecoder {
     inner: MessageDecoder<
         Fields<(
@@ -665,15 +752,16 @@ pub struct ListLumpResponseDecoder {
         )>,
     >,
 }
-impl_message_decode!(
-    ListLumpResponseDecoder,
-    cannyls::Result<Vec<LumpId>>,
-    |(ids, error)| if let Some(error) = error {
-        Ok(Err(error))
-    } else {
-        Ok(Ok(ids))
-    }
-);
+impl_message_decode!(ListLumpResponseDecoder, cannyls::Result<Vec<LumpId>>, |(
+    ids,
+    error,
+)| if let Some(error) =
+    error
+{
+    Ok(Err(error))
+} else {
+    Ok(Ok(ids))
+});
 
 #[derive(Debug, Default)]
 pub struct ListLumpResponseEncoder {
@@ -690,6 +778,43 @@ impl_message_encode!(
     |item: Self::Item| match item {
         Err(e) => (Vec::new(), Some(e)),
         Ok(ids) => (ids, None),
+    }
+);
+
+#[derive(Debug, Default)]
+pub struct UsageRangeResponseDecoder {
+    inner: MessageDecoder<
+        Fields<(
+            MaybeDefault<MessageFieldDecoder<F1, StorageUsageDecoder>>,
+            Optional<MessageFieldDecoder<F2, ErrorDecoder>>,
+        )>,
+    >,
+}
+impl_message_decode!(
+    UsageRangeResponseDecoder,
+    cannyls::Result<StorageUsage>,
+    |(usage, error)| if let Some(error) = error {
+        Ok(Err(error))
+    } else {
+        Ok(Ok(usage))
+    }
+);
+
+#[derive(Debug, Default)]
+pub struct UsageRangeResponseEncoder {
+    inner: MessageEncoder<
+        Fields<(
+            MessageFieldEncoder<F1, StorageUsageEncoder>,
+            Optional<MessageFieldEncoder<F2, ErrorEncoder>>,
+        )>,
+    >,
+}
+impl_sized_message_encode!(
+    UsageRangeResponseEncoder,
+    cannyls::Result<StorageUsage>,
+    |item: Self::Item| match item {
+        Err(e) => (Default::default(), Some(e)),
+        Ok(usage) => (usage, None),
     }
 );
 
@@ -740,59 +865,69 @@ mod tests {
             let mut encoder: $encoder = Default::default();
             let mut decoder: $decoder = Default::default();
 
-            let bytes = track_try_unwrap!(encoder.encode_into_bytes($value));
+            let bytes = track_try_unwrap!(encoder.encode_into_bytes($value()));
             let decoded = track_try_unwrap!(track!(decoder.decode_from_bytes(&bytes); bytes));
-            assert_eq!(decoded, $value);
+            assert_eq!(decoded, $value());
         };
     }
 
     #[test]
     fn lump_id_encdec_works() {
-        assert_encdec!(LumpIdEncoder, LumpIdDecoder, LumpId::new(0));
-        assert_encdec!(LumpIdEncoder, LumpIdDecoder, LumpId::new((123 << 64) | 345));
+        assert_encdec!(LumpIdEncoder, LumpIdDecoder, || LumpId::new(0));
+        assert_encdec!(LumpIdEncoder, LumpIdDecoder, || LumpId::new(
+            (123 << 64) | 345
+        ));
     }
 
     #[test]
     fn deadline_encdec_works() {
-        assert_encdec!(DeadlineEncoder, DeadlineDecoder, Deadline::Immediate);
-        assert_encdec!(DeadlineEncoder, DeadlineDecoder, Deadline::Infinity);
-        assert_encdec!(
-            DeadlineEncoder,
-            DeadlineDecoder,
-            Deadline::Within(Duration::from_secs(0))
-        );
-        assert_encdec!(
-            DeadlineEncoder,
-            DeadlineDecoder,
-            Deadline::Within(Duration::from_millis(123))
-        );
+        assert_encdec!(DeadlineEncoder, DeadlineDecoder, || Deadline::Immediate);
+        assert_encdec!(DeadlineEncoder, DeadlineDecoder, || Deadline::Infinity);
+        assert_encdec!(DeadlineEncoder, DeadlineDecoder, || Deadline::Within(
+            Duration::from_secs(0)
+        ));
+        assert_encdec!(DeadlineEncoder, DeadlineDecoder, || Deadline::Within(
+            Duration::from_millis(123)
+        ));
     }
 
     #[test]
     fn request_options_encdec_works() {
-        assert_encdec!(
-            RequestOptionsEncoder,
-            RequestOptionsDecoder,
+        assert_encdec!(RequestOptionsEncoder, RequestOptionsDecoder, || {
             RequestOptions {
                 deadline: Deadline::Immediate,
-                max_queue_len: None
+                max_queue_len: None,
             }
-        );
-        assert_encdec!(
-            RequestOptionsEncoder,
-            RequestOptionsDecoder,
+        });
+        assert_encdec!(RequestOptionsEncoder, RequestOptionsDecoder, || {
             RequestOptions {
                 deadline: Deadline::Infinity,
-                max_queue_len: Some(0)
+                max_queue_len: Some(0),
             }
-        );
-        assert_encdec!(
-            RequestOptionsEncoder,
-            RequestOptionsDecoder,
+        });
+        assert_encdec!(RequestOptionsEncoder, RequestOptionsDecoder, || {
             RequestOptions {
                 deadline: Deadline::Infinity,
-                max_queue_len: Some(123)
+                max_queue_len: Some(123),
             }
-        );
+        });
+    }
+
+    #[test]
+    fn usage_range_request_encdec_works() {
+        let request = UsageRangeRequest {
+            device_id: DeviceId::new("device"),
+            range: Range {
+                start: LumpId::new(1),
+                end: LumpId::new(3),
+            },
+            options: RequestOptions {
+                deadline: Deadline::Infinity,
+                max_queue_len: Some(123),
+            },
+        };
+        assert_encdec!(UsageRangeRequestEncoder, UsageRangeRequestDecoder, || {
+            request.clone()
+        });
     }
 }

@@ -1,8 +1,10 @@
 use cannyls::deadline::Deadline;
 use cannyls::device::{self, DeviceHandle};
 use cannyls::lump::{LumpData, LumpHeader, LumpId};
+use cannyls::storage::StorageUsage;
 use cannyls::Result;
 use fibers_rpc::{Call, ProcedureId};
+use std::ops::Range;
 
 use device::DeviceId;
 use protobuf::{
@@ -10,7 +12,8 @@ use protobuf::{
     GetLumpResponseDecoder, GetLumpResponseEncoder, HeadLumpResponseDecoder,
     HeadLumpResponseEncoder, ListLumpResponseDecoder, ListLumpResponseEncoder, LumpRequestDecoder,
     LumpRequestEncoder, PutLumpRequestDecoder, PutLumpRequestEncoder, PutLumpResponseDecoder,
-    PutLumpResponseEncoder,
+    PutLumpResponseEncoder, UsageRangeRequestDecoder, UsageRangeRequestEncoder,
+    UsageRangeResponseDecoder, UsageRangeResponseEncoder,
 };
 
 const NS_CANNYLS: u32 = 0x0001_0000; // cannyls用のRPCの名前空間(ID範囲)
@@ -90,6 +93,21 @@ impl Call for ListLumpRpc {
     type ResEncoder = ListLumpResponseEncoder;
 }
 
+#[derive(Debug)]
+pub struct UsageRangeRpc;
+impl Call for UsageRangeRpc {
+    const ID: ProcedureId = ProcedureId(NS_CANNYLS | 0x0006);
+    const NAME: &'static str = "cannyls.lump.usage_range";
+
+    type Req = UsageRangeRequest;
+    type ReqDecoder = UsageRangeRequestDecoder;
+    type ReqEncoder = UsageRangeRequestEncoder;
+
+    type Res = Result<StorageUsage>;
+    type ResDecoder = UsageRangeResponseDecoder;
+    type ResEncoder = UsageRangeResponseEncoder;
+}
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct RequestOptions {
     pub deadline: Deadline,
@@ -124,5 +142,12 @@ pub struct PutLumpRequest {
     pub device_id: DeviceId,
     pub lump_id: LumpId,
     pub lump_data: LumpData,
+    pub options: RequestOptions,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct UsageRangeRequest {
+    pub device_id: DeviceId,
+    pub range: Range<LumpId>,
     pub options: RequestOptions,
 }

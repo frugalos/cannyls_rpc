@@ -39,6 +39,7 @@ impl Server {
         );
         builder.add_call_handler::<rpc::DeleteLumpRpc, _>(clone());
         builder.add_call_handler::<rpc::ListLumpRpc, _>(clone());
+        builder.add_call_handler::<rpc::UsageRangeRpc, _>(clone());
     }
 }
 impl HandleCall<rpc::GetLumpRpc> for Server {
@@ -82,6 +83,17 @@ impl HandleCall<rpc::ListLumpRpc> for Server {
     fn handle_call(&self, request: rpc::DeviceRequest) -> Reply<rpc::ListLumpRpc> {
         let device = rpc_try!(self.registry.get_device(&request.device_id));
         let future = request.options.with(&device).list().then(Ok);
+        Reply::future(future)
+    }
+}
+impl HandleCall<rpc::UsageRangeRpc> for Server {
+    fn handle_call(&self, request: rpc::UsageRangeRequest) -> Reply<rpc::UsageRangeRpc> {
+        let device = rpc_try!(self.registry.get_device(&request.device_id));
+        let future = request
+            .options
+            .with(&device)
+            .usage_range(request.range)
+            .then(Ok);
         Reply::future(future)
     }
 }
