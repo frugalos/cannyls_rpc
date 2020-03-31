@@ -122,6 +122,10 @@ impl Call for DeleteRangeRpc {
     type Res = Result<Vec<LumpId>>;
     type ResDecoder = DeleteRangeResponseDecoder;
     type ResEncoder = DeleteRangeResponseEncoder;
+
+    fn enable_async_response(_: &Self::Res) -> bool {
+        true
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
