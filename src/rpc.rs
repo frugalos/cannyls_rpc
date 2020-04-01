@@ -8,12 +8,13 @@ use std::ops::Range;
 
 use device::DeviceId;
 use protobuf::{
-    DeleteLumpRequestDecoder, DeleteLumpRequestEncoder, DeviceRequestDecoder, DeviceRequestEncoder,
-    GetLumpResponseDecoder, GetLumpResponseEncoder, HeadLumpResponseDecoder,
-    HeadLumpResponseEncoder, ListLumpResponseDecoder, ListLumpResponseEncoder, LumpRequestDecoder,
-    LumpRequestEncoder, PutLumpRequestDecoder, PutLumpRequestEncoder, PutLumpResponseDecoder,
-    PutLumpResponseEncoder, UsageRangeRequestDecoder, UsageRangeRequestEncoder,
-    UsageRangeResponseDecoder, UsageRangeResponseEncoder,
+    DeleteLumpRequestDecoder, DeleteLumpRequestEncoder, DeleteRangeResponseDecoder,
+    DeleteRangeResponseEncoder, DeviceRequestDecoder, DeviceRequestEncoder, GetLumpResponseDecoder,
+    GetLumpResponseEncoder, HeadLumpResponseDecoder, HeadLumpResponseEncoder,
+    ListLumpResponseDecoder, ListLumpResponseEncoder, LumpRequestDecoder, LumpRequestEncoder,
+    PutLumpRequestDecoder, PutLumpRequestEncoder, PutLumpResponseDecoder, PutLumpResponseEncoder,
+    RangeLumpRequestDecoder, RangeLumpRequestEncoder, UsageRangeRequestDecoder,
+    UsageRangeRequestEncoder, UsageRangeResponseDecoder, UsageRangeResponseEncoder,
 };
 
 const NS_CANNYLS: u32 = 0x0001_0000; // cannyls用のRPCの名前空間(ID範囲)
@@ -108,6 +109,25 @@ impl Call for UsageRangeRpc {
     type ResEncoder = UsageRangeResponseEncoder;
 }
 
+#[derive(Debug)]
+pub struct DeleteRangeRpc;
+impl Call for DeleteRangeRpc {
+    const ID: ProcedureId = ProcedureId(NS_CANNYLS | 0x0007);
+    const NAME: &'static str = "cannyls.lump.delete_range";
+
+    type Req = RangeLumpRequest;
+    type ReqDecoder = RangeLumpRequestDecoder;
+    type ReqEncoder = RangeLumpRequestEncoder;
+
+    type Res = Result<Vec<LumpId>>;
+    type ResDecoder = DeleteRangeResponseDecoder;
+    type ResEncoder = DeleteRangeResponseEncoder;
+
+    fn enable_async_response(_: &Self::Res) -> bool {
+        true
+    }
+}
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct RequestOptions {
     pub deadline: Deadline,
@@ -147,6 +167,13 @@ pub struct PutLumpRequest {
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct UsageRangeRequest {
+    pub device_id: DeviceId,
+    pub range: Range<LumpId>,
+    pub options: RequestOptions,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct RangeLumpRequest {
     pub device_id: DeviceId,
     pub range: Range<LumpId>,
     pub options: RequestOptions,

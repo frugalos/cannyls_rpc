@@ -33,7 +33,9 @@ use std;
 use std::ops::Range;
 use trackable::error::{ErrorKindExt, TrackableError};
 
-use rpc::{DeviceRequest, LumpRequest, PutLumpRequest, RequestOptions, UsageRangeRequest};
+use rpc::{
+    DeviceRequest, LumpRequest, PutLumpRequest, RangeLumpRequest, RequestOptions, UsageRangeRequest,
+};
 use {DeviceId, DeviceRegistryHandle};
 
 macro_rules! impl_message_decode {
@@ -818,6 +820,55 @@ impl_sized_message_encode!(
     }
 );
 
+#[derive(Debug, Default)]
+pub struct RangeLumpRequestDecoder {
+    inner: MessageDecoder<
+        Fields<(
+            MaybeDefault<FieldDecoder<F1, StringDecoder>>,
+            MessageFieldDecoder<F2, LumpIdDecoder>,
+            MessageFieldDecoder<F3, LumpIdDecoder>,
+            MessageFieldDecoder<F4, RequestOptionsDecoder>,
+        )>,
+    >,
+}
+impl_message_decode!(RangeLumpRequestDecoder, RangeLumpRequest, |(
+    device_id,
+    start,
+    end,
+    options,
+)| Ok(
+    RangeLumpRequest {
+        device_id: DeviceId::new(device_id),
+        range: Range { start, end },
+        options
+    }
+));
+
+#[derive(Debug, Default)]
+pub struct RangeLumpRequestEncoder {
+    inner: MessageEncoder<
+        Fields<(
+            MaybeDefault<FieldEncoder<F1, StringEncoder>>,
+            MessageFieldEncoder<F2, LumpIdEncoder>,
+            MessageFieldEncoder<F3, LumpIdEncoder>,
+            MessageFieldEncoder<F4, RequestOptionsEncoder>,
+        )>,
+    >,
+}
+impl_sized_message_encode!(
+    RangeLumpRequestEncoder,
+    RangeLumpRequest,
+    |item: Self::Item| (
+        item.device_id.into_string(),
+        item.range.start,
+        item.range.end,
+        item.options,
+    )
+);
+
+pub type DeleteRangeResponseDecoder = ListLumpResponseDecoder;
+pub type DeleteRangeResponseEncoder = ListLumpResponseEncoder;
+
 fn result_into_branch<T, E>(result: std::result::Result<T, E>) -> Branch2<T, E> {
     match result {
         Ok(a) => Branch2::A(a),
@@ -927,6 +978,24 @@ mod tests {
             },
         };
         assert_encdec!(UsageRangeRequestEncoder, UsageRangeRequestDecoder, || {
+            request.clone()
+        });
+    }
+
+    #[test]
+    fn range_lump_request_encdec_works() {
+        let request = RangeLumpRequest {
+            device_id: DeviceId::new("device"),
+            range: Range {
+                start: LumpId::new(1),
+                end: LumpId::new(3),
+            },
+            options: RequestOptions {
+                deadline: Deadline::Infinity,
+                max_queue_len: Some(123),
+            },
+        };
+        assert_encdec!(RangeLumpRequestEncoder, RangeLumpRequestDecoder, || {
             request.clone()
         });
     }

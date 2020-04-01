@@ -210,6 +210,29 @@ impl<'a> RequestBuilder<'a> {
         Response::new(self.client.server, client.call(self.client.server, request))
     }
 
+    /// lump の範囲を指定して削除し対象となった lump の一覧を返す.
+    ///
+    /// # Errors
+    ///
+    /// 例えば、以下のようなエラーが返されることがある:
+    /// - 指定されたデバイスが存在しない場合には`ErrorKind::InvalidInput`
+    /// - 指定されたデバイスが現在利用不可能な場合には`ErrorKind::DeviceBusy`
+    pub fn delete_range(
+        &self,
+        device_id: DeviceId,
+        range: Range<LumpId>,
+    ) -> impl Future<Item = Vec<LumpId>, Error = Error> {
+        let mut client = rpc::DeleteRangeRpc::client(&self.client.rpc_service);
+        *client.options_mut() = self.rpc_options.clone();
+
+        let request = rpc::RangeLumpRequest {
+            device_id,
+            range,
+            options: self.request_options(),
+        };
+        Response::new(self.client.server, client.call(self.client.server, request))
+    }
+
     fn new(client: &'a Client) -> Self {
         RequestBuilder {
             client,
