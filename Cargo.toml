@@ -1,6 +1,6 @@
 [package]
 name = "cannyls_rpc"
-version = "0.1.1"
+version = "0.1.2"
 authors = ["The FrugalOS Developers"]
 description = "RPC library for operating cannyls's devices from remote nodes"
 homepage = "https://github.com/frugalos/cannyls_rpc"
