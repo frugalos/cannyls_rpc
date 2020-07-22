@@ -38,6 +38,7 @@ pub struct RequestBuilder<'a> {
     client: &'a Client,
     deadline: Option<Deadline>,
     max_queue_len: Option<usize>,
+    prioritized: bool,
     rpc_options: fibers_rpc::client::Options,
 }
 impl<'a> RequestBuilder<'a> {
@@ -57,6 +58,16 @@ impl<'a> RequestBuilder<'a> {
     /// デフォルトでは制限なし.
     pub fn max_queue_len(&mut self, n: usize) -> &mut Self {
         self.max_queue_len = Some(n);
+        self
+    }
+
+    /// リクエストを優先的に処理する。
+    ///
+    /// デフォルトでは、全てのリクエストは、過負荷時に無視される。
+    /// prioritized が呼び出されたリクエストは、
+    /// キューの長さが hard limit に達するまでは、たとえ過負荷であっても処理される。
+    pub fn prioritized(&mut self) -> &mut Self {
+        self.prioritized = true;
         self
     }
 
@@ -238,6 +249,7 @@ impl<'a> RequestBuilder<'a> {
             client,
             deadline: None,
             max_queue_len: None,
+            prioritized: false,
             rpc_options: fibers_rpc::client::Options::default(),
         }
     }
@@ -253,6 +265,7 @@ impl<'a> RequestBuilder<'a> {
     fn request_options(&self) -> rpc::RequestOptions {
         rpc::RequestOptions {
             deadline: self.deadline.unwrap_or_default(),
+            prioritized: self.prioritized,
             max_queue_len: self.max_queue_len,
         }
     }

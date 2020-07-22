@@ -31,6 +31,7 @@ use protobuf_codec::wellknown::protobuf_codec::protobuf::trackable;
 use protobuf_codec::wire::Tag;
 use std;
 use std::ops::Range;
+use std::str::FromStr;
 use trackable::error::{ErrorKindExt, TrackableError};
 
 use rpc::{
@@ -207,12 +208,14 @@ pub struct RequestOptionsDecoder {
         Fields<(
             MaybeDefault<MessageFieldDecoder<F1, DeadlineDecoder>>,
             MaybeDefault<FieldDecoder<F2, Uint32Decoder>>,
+            MaybeDefault<FieldDecoder<F3, BoolDecoder>>,
         )>,
     >,
 }
 impl_message_decode!(RequestOptionsDecoder, RequestOptions, |(
     deadline,
     queue_size_limit,
+    prioritized,
 )| {
     let max_queue_len = if queue_size_limit == 0 {
         None
@@ -222,6 +225,7 @@ impl_message_decode!(RequestOptionsDecoder, RequestOptions, |(
     Ok(RequestOptions {
         deadline,
         max_queue_len,
+        prioritized,
     })
 });
 
@@ -231,12 +235,13 @@ pub struct RequestOptionsEncoder {
         Fields<(
             MessageFieldEncoder<F1, DeadlineEncoder>,
             MaybeDefault<FieldEncoder<F2, Uint32Encoder>>,
+            MaybeDefault<FieldEncoder<F3, BoolEncoder>>,
         )>,
     >,
 }
 impl_sized_message_encode!(RequestOptionsEncoder, RequestOptions, |item: Self::Item| {
     let queue_size_limit = item.max_queue_len.map_or(0, |n| n + 1);
-    (item.deadline, queue_size_limit as u32)
+    (item.deadline, queue_size_limit as u32, item.prioritized)
 });
 
 #[derive(Debug, Default)]
@@ -519,14 +524,9 @@ pub struct ErrorDecoder {
     inner: MessageDecoder<MessageFieldDecoder<F1, trackable::ErrorDecoder>>,
 }
 impl_message_decode!(ErrorDecoder, cannyls::Error, |e: TrackableError<String>| {
-    let kind = match e.kind().as_str() {
-        "StorageFull" => cannyls::ErrorKind::StorageFull,
-        "StorageCorrupted" => cannyls::ErrorKind::StorageCorrupted,
-        "DeviceBusy" => cannyls::ErrorKind::DeviceBusy,
-        "DeviceTerminated" => cannyls::ErrorKind::DeviceTerminated,
-        "InvalidInput" => cannyls::ErrorKind::InvalidInput,
-        "InconsistentState" => cannyls::ErrorKind::InconsistentState,
-        _ => cannyls::ErrorKind::Other,
+    let kind = match cannyls::ErrorKind::from_str(e.kind().as_str()) {
+        Ok(kind) => kind,
+        Err(()) => cannyls::ErrorKind::Other,
     };
     Ok(kind.takes_over(e).into())
 });
@@ -536,16 +536,7 @@ pub struct ErrorEncoder {
     inner: MessageEncoder<MessageFieldEncoder<F1, PreEncode<trackable::ErrorEncoder>>>,
 }
 impl_sized_message_encode!(ErrorEncoder, cannyls::Error, |item: Self::Item| {
-    // NOTE: `cannyls::ErrorKind`の定義変更を検出しやすくするために、あえて明示的に列挙している
-    let kind = match *item.kind() {
-        cannyls::ErrorKind::StorageFull => "StorageFull".to_owned(),
-        cannyls::ErrorKind::StorageCorrupted => "StorageCorrupted".to_owned(),
-        cannyls::ErrorKind::DeviceBusy => "DeviceBusy".to_owned(),
-        cannyls::ErrorKind::DeviceTerminated => "DeviceTerminated".to_owned(),
-        cannyls::ErrorKind::InvalidInput => "InvalidInput".to_owned(),
-        cannyls::ErrorKind::InconsistentState => "InconsistentState".to_owned(),
-        cannyls::ErrorKind::Other => "Other".to_owned(),
-    };
+    let kind = item.kind().to_string();
     kind.takes_over(item)
 });
 
@@ -948,18 +939,21 @@ mod tests {
             RequestOptions {
                 deadline: Deadline::Immediate,
                 max_queue_len: None,
+                prioritized: false,
             }
         });
         assert_encdec!(RequestOptionsEncoder, RequestOptionsDecoder, || {
             RequestOptions {
                 deadline: Deadline::Infinity,
                 max_queue_len: Some(0),
+                prioritized: false,
             }
         });
         assert_encdec!(RequestOptionsEncoder, RequestOptionsDecoder, || {
             RequestOptions {
                 deadline: Deadline::Infinity,
                 max_queue_len: Some(123),
+                prioritized: true,
             }
         });
     }
@@ -975,6 +969,7 @@ mod tests {
             options: RequestOptions {
                 deadline: Deadline::Infinity,
                 max_queue_len: Some(123),
+                prioritized: false,
             },
         };
         assert_encdec!(UsageRangeRequestEncoder, UsageRangeRequestDecoder, || {
@@ -993,6 +988,7 @@ mod tests {
             options: RequestOptions {
                 deadline: Deadline::Infinity,
                 max_queue_len: Some(123),
+                prioritized: false,
             },
         };
         assert_encdec!(RangeLumpRequestEncoder, RangeLumpRequestDecoder, || {
