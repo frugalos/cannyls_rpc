@@ -132,11 +132,15 @@ impl Call for DeleteRangeRpc {
 pub struct RequestOptions {
     pub deadline: Deadline,
     pub max_queue_len: Option<usize>,
+    pub prioritized: bool,
 }
 impl RequestOptions {
     pub fn with<'a>(&self, device: &'a DeviceHandle) -> device::DeviceRequest<'a> {
         let mut request = device.request();
         request.deadline(self.deadline);
+        if self.prioritized {
+            request.prioritized();
+        }
         if let Some(n) = self.max_queue_len {
             request.max_queue_len(n);
         }
