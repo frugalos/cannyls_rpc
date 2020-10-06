@@ -105,6 +105,17 @@ impl DeviceRegistry {
         }
     }
 
+    /// デバイスが動いているかどうかを返す。
+    pub fn is_device_running(&mut self, device_id: &DeviceId) -> bool {
+        info!(self.logger, "Checking if device {:?} is running", device_id);
+        if let Some(state) = self.devices.get(device_id) {
+            !state.terminated
+        } else {
+            info!(self.logger, "Invalid device ID: {:?}", device_id);
+            false
+        }
+    }
+
     fn handle_command(&mut self, command: Command) {
         match command {
             Command::PutDevice(id, device) => self.handle_put_device(&id, device),
