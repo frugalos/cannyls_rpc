@@ -85,6 +85,37 @@ impl DeviceRegistry {
         self.being_stopped = true;
     }
 
+    /// デバイスを止める。
+    /// 対象とするデバイスが見つかった場合は true を、見つからなかった場合は false を返す。
+    pub fn stop_device(&mut self, device_id: &DeviceId) -> bool {
+        info!(self.logger, "Stopping device: {:?}", device_id);
+        if let Some(state) = self.devices.get(device_id) {
+            if state.terminated {
+                info!(
+                    self.logger,
+                    "stop_device: Device {:?} has already been terminated", device_id
+                );
+            } else {
+                state.device.stop(Deadline::Immediate);
+            }
+            true
+        } else {
+            info!(self.logger, "Invalid device ID: {:?}", device_id);
+            false
+        }
+    }
+
+    /// デバイスが動いているかどうかを返す。
+    pub fn is_device_running(&mut self, device_id: &DeviceId) -> bool {
+        info!(self.logger, "Checking if device {:?} is running", device_id);
+        if let Some(state) = self.devices.get(device_id) {
+            !state.terminated
+        } else {
+            info!(self.logger, "Invalid device ID: {:?}", device_id);
+            false
+        }
+    }
+
     fn handle_command(&mut self, command: Command) {
         match command {
             Command::PutDevice(id, device) => self.handle_put_device(&id, device),
