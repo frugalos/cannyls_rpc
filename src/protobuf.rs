@@ -4,10 +4,10 @@
 //!
 //! [cannyls_rpc.proto]: https://github.com/frugalos/cannyls_rpc/blob/master/protobuf/cannyls_rpc.proto
 #![cfg_attr(feature = "cargo-clippy", allow(clippy::type_complexity))]
+use ::trackable::error::{ErrorKindExt, TrackableError};
 use bytecodec::bytes::BytesDecoder as BytecodecBytesDecoder;
 use bytecodec::combinator::{Peekable, PreEncode};
 use bytecodec::{self, ByteCount, Decode, Encode, Eos, ErrorKind, Result, SizedEncode};
-use cannyls;
 use cannyls::block::BlockSize;
 use cannyls::deadline::Deadline;
 use cannyls::device::DeviceHandle;
@@ -29,15 +29,13 @@ use protobuf_codec::scalar::{
 use protobuf_codec::wellknown::google::protobuf::{StdDurationDecoder, StdDurationEncoder};
 use protobuf_codec::wellknown::protobuf_codec::protobuf::trackable;
 use protobuf_codec::wire::Tag;
-use std;
 use std::ops::Range;
 use std::str::FromStr;
-use trackable::error::{ErrorKindExt, TrackableError};
 
-use rpc::{
+use crate::rpc::{
     DeviceRequest, LumpRequest, PutLumpRequest, RangeLumpRequest, RequestOptions, UsageRangeRequest,
 };
-use {DeviceId, DeviceRegistryHandle};
+use crate::{DeviceId, DeviceRegistryHandle};
 
 macro_rules! impl_message_decode {
     ($decoder:ty, $item:ty, $map:expr) => {

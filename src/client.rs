@@ -8,8 +8,8 @@ use std::net::SocketAddr;
 use std::ops::Range;
 use trackable::error::ErrorKindExt;
 
-use device::DeviceId;
-use rpc;
+use crate::device::DeviceId;
+use crate::rpc;
 
 /// RPCクライアント.
 #[derive(Debug, Clone)]

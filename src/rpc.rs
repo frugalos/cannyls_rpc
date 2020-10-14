@@ -6,8 +6,8 @@ use cannyls::Result;
 use fibers_rpc::{Call, ProcedureId};
 use std::ops::Range;
 
-use device::DeviceId;
-use protobuf::{
+use crate::device::DeviceId;
+use crate::protobuf::{
     DeleteLumpRequestDecoder, DeleteLumpRequestEncoder, DeleteRangeResponseDecoder,
     DeleteRangeResponseEncoder, DeviceRequestDecoder, DeviceRequestEncoder, GetLumpResponseDecoder,
     GetLumpResponseEncoder, HeadLumpResponseDecoder, HeadLumpResponseEncoder,
