@@ -12,7 +12,7 @@ use std::hash::Hash;
 use std::sync::{Arc, Mutex};
 use trackable::error::ErrorKindExt;
 
-use device::DeviceId;
+use crate::device::DeviceId;
 
 type DeviceHandles = Arc<AtomicImmut<HashMap<DeviceId, Mutex<DeviceHandle>>>>;
 

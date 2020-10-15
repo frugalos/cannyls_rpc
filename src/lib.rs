@@ -24,10 +24,10 @@ extern crate slog;
 #[macro_use]
 extern crate trackable;
 
-pub use client::{Client, RequestBuilder};
-pub use device::DeviceId;
-pub use registry::{DeviceRegistry, DeviceRegistryHandle};
-pub use server::Server;
+pub use crate::client::{Client, RequestBuilder};
+pub use crate::device::DeviceId;
+pub use crate::registry::{DeviceRegistry, DeviceRegistryHandle};
+pub use crate::server::Server;
 
 mod client;
 mod device;

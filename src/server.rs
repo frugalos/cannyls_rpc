@@ -1,9 +1,9 @@
 use fibers_rpc::server::{HandleCall, Reply, ServerBuilder};
 use futures::Future;
 
-use protobuf::PutLumpRequestDecoderFactory;
-use registry::DeviceRegistryHandle;
-use rpc;
+use crate::protobuf::PutLumpRequestDecoderFactory;
+use crate::registry::DeviceRegistryHandle;
+use crate::rpc;
 
 macro_rules! rpc_try {
     ($expr:expr) => {
