@@ -1,15 +1,17 @@
 use atomic_immut::AtomicImmut;
 use cannyls::deadline::Deadline;
 use cannyls::device::{Device, DeviceHandle};
-use cannyls::{Error, ErrorKind, Result};
-use fibers::sync::mpsc;
-use futures::{Async, Future, Poll, Stream};
+use cannyls::{ErrorKind, Result};
+use futures::Future;
 use slog::Logger;
 use std::borrow::Borrow;
 use std::collections::HashMap;
 use std::fmt::Debug;
 use std::hash::Hash;
+use std::pin::Pin;
 use std::sync::{Arc, Mutex};
+use std::task::{Context, Poll};
+use tokio::sync::mpsc;
 use trackable::error::ErrorKindExt;
 
 use crate::device::DeviceId;
@@ -35,8 +37,8 @@ pub struct DeviceRegistry {
     device_handles: DeviceHandles,
 
     // レジストリに対するコマンド送受信チャンネル.
-    command_tx: mpsc::Sender<Command>,
-    command_rx: mpsc::Receiver<Command>,
+    command_tx: mpsc::UnboundedSender<Command>,
+    command_rx: mpsc::UnboundedReceiver<Command>,
 
     // レジストリが停止中かどうかを示すためのフラグ.
     being_stopped: bool,
@@ -44,7 +46,7 @@ pub struct DeviceRegistry {
 impl DeviceRegistry {
     /// 新しいレジストリインスタンスを生成する.
     pub fn new(logger: Logger) -> Self {
-        let (command_tx, command_rx) = mpsc::channel();
+        let (command_tx, command_rx) = mpsc::unbounded_channel();
         DeviceRegistry {
             logger,
             devices: HashMap::new(),
@@ -72,7 +74,7 @@ impl DeviceRegistry {
     /// 1. 以後は、レジストリに対するデバイス登録要求、は全て無視される
     /// 2. 全登録デバイスに停止命令が発行される
     /// 3. 全デバイスが停止したら、レジストリ自体を停止する
-    ///    - i.e., `Future:poll`の結果が`Ok(Async::Ready(()))`となる
+    ///    - i.e., `Future:poll`の結果が`Poll::Ready(Ok(()))`となる
     pub fn stop(&mut self) {
         info!(self.logger, "Starts being_stopped all devices");
         for (id, state) in &mut self.devices {
@@ -159,35 +161,34 @@ impl DeviceRegistry {
     }
 }
 impl Future for DeviceRegistry {
-    type Item = ();
-    type Error = Error;
-    fn poll(&mut self) -> Poll<Self::Item, Self::Error> {
-        while let Async::Ready(command) = self.command_rx.poll().expect("Never fails") {
-            let command = command.expect("DeviceRegistryが`command_tx`を保持しているので、このストリームが終端することはない");
+    type Output = Result<()>;
+    fn poll(mut self: Pin<&mut Self>, cx: &mut Context) -> Poll<Self::Output> {
+        while let Poll::Ready(Some(command)) = self.command_rx.poll_recv(cx) {
             self.handle_command(command);
         }
 
+        let logger = self.logger.clone();
         for (id, state) in &mut self.devices {
             if state.terminated {
                 continue;
             }
-            match track!(state.device.poll()) {
-                Err(e) => {
-                    error!(self.logger, "Device {:?} terminated abnormally: {}", id, e);
+            match track!(Pin::new(&mut state.device).poll(cx)) {
+                Poll::Ready(Err(e)) => {
+                    error!(logger, "Device {:?} terminated abnormally: {}", id, e);
                     state.terminated = true;
                 }
-                Ok(Async::Ready(())) => {
-                    info!(self.logger, "Device {:?} terminated normally", id);
+                Poll::Ready(Ok(())) => {
+                    info!(logger, "Device {:?} terminated normally", id);
                     state.terminated = true;
                 }
-                Ok(Async::NotReady) => {}
+                Poll::Pending => {}
             }
         }
         if self.being_stopped && self.devices.values().all(|d| d.terminated) {
-            info!(self.logger, "All devices have stopped");
-            Ok(Async::Ready(()))
+            info!(logger, "All devices have stopped");
+            Poll::Ready(Ok(()))
         } else {
-            Ok(Async::NotReady)
+            Poll::Pending
         }
     }
 }
@@ -200,7 +201,7 @@ impl Drop for DeviceRegistry {
 /// デバイスレジストリを操作するためのハンドル.
 #[derive(Debug, Clone)]
 pub struct DeviceRegistryHandle {
-    command_tx: mpsc::Sender<Command>,
+    command_tx: mpsc::UnboundedSender<Command>,
     device_handles: DeviceHandles,
 }
 impl DeviceRegistryHandle {

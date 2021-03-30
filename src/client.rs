@@ -1,11 +1,14 @@
 use cannyls::deadline::Deadline;
 use cannyls::lump::{LumpData, LumpHeader, LumpId};
 use cannyls::storage::StorageUsage;
-use cannyls::{Error, ErrorKind, Result};
+use cannyls::{ErrorKind, Result};
 use fibers_rpc::{self, Call};
-use futures::{Async, Future, Poll};
+use futures::future::FutureExt;
+use futures::Future;
 use std::net::SocketAddr;
 use std::ops::Range;
+use std::pin::Pin;
+use std::task::{Context, Poll};
 use trackable::error::ErrorKindExt;
 
 use crate::device::DeviceId;
@@ -92,13 +95,13 @@ impl<'a> RequestBuilder<'a> {
         &self,
         device_id: DeviceId,
         lump_id: LumpId,
-    ) -> impl Future<Item = Option<Vec<u8>>, Error = Error> {
+    ) -> impl Future<Output = Result<Option<Vec<u8>>>> {
         let mut client = rpc::GetLumpRpc::client(&self.client.rpc_service);
         *client.options_mut() = self.rpc_options.clone();
 
         let request = self.lump_request(device_id, lump_id);
         let future = Response::new(self.client.server, client.call(self.client.server, request));
-        future.map(|data| data.map(|d| d.into_bytes()))
+        future.map(|result| track!(result.map(|data| data.map(|d| d.into_bytes()))))
     }
 
     /// Lumpヘッダ(要約情報)の取得を行う.
@@ -114,7 +117,7 @@ impl<'a> RequestBuilder<'a> {
         &self,
         device_id: DeviceId,
         lump_id: LumpId,
-    ) -> impl Future<Item = Option<LumpHeader>, Error = Error> {
+    ) -> impl Future<Output = Result<Option<LumpHeader>>> {
         let mut client = rpc::HeadLumpRpc::client(&self.client.rpc_service);
         *client.options_mut() = self.rpc_options.clone();
 
@@ -142,7 +145,7 @@ impl<'a> RequestBuilder<'a> {
         device_id: DeviceId,
         lump_id: LumpId,
         lump_data: LumpData,
-    ) -> impl Future<Item = bool, Error = Error> {
+    ) -> impl Future<Output = Result<bool>> {
         let mut client = rpc::PutLumpRpc::client(&self.client.rpc_service);
         *client.options_mut() = self.rpc_options.clone();
 
@@ -169,7 +172,7 @@ impl<'a> RequestBuilder<'a> {
         &self,
         device_id: DeviceId,
         lump_id: LumpId,
-    ) -> impl Future<Item = bool, Error = Error> {
+    ) -> impl Future<Output = Result<bool>> {
         let mut client = rpc::DeleteLumpRpc::client(&self.client.rpc_service);
         *client.options_mut() = self.rpc_options.clone();
 
@@ -184,10 +187,7 @@ impl<'a> RequestBuilder<'a> {
     /// 例えば、以下のようなエラーが返されることがある:
     /// - 指定されたデバイスが存在しない場合には`ErrorKind::InvalidInput`
     /// - 指定されたデバイスが現在利用不可能な場合には`ErrorKind::DeviceBusy`
-    pub fn list_lumps(
-        &self,
-        device_id: DeviceId,
-    ) -> impl Future<Item = Vec<LumpId>, Error = Error> {
+    pub fn list_lumps(&self, device_id: DeviceId) -> impl Future<Output = Result<Vec<LumpId>>> {
         let mut client = rpc::ListLumpRpc::client(&self.client.rpc_service);
         *client.options_mut() = self.rpc_options.clone();
 
@@ -209,7 +209,7 @@ impl<'a> RequestBuilder<'a> {
         &self,
         device_id: DeviceId,
         range: Range<LumpId>,
-    ) -> impl Future<Item = StorageUsage, Error = Error> {
+    ) -> impl Future<Output = Result<StorageUsage>> {
         let mut client = rpc::UsageRangeRpc::client(&self.client.rpc_service);
         *client.options_mut() = self.rpc_options.clone();
 
@@ -232,7 +232,7 @@ impl<'a> RequestBuilder<'a> {
         &self,
         device_id: DeviceId,
         range: Range<LumpId>,
-    ) -> impl Future<Item = Vec<LumpId>, Error = Error> {
+    ) -> impl Future<Output = Result<Vec<LumpId>>> {
         let mut client = rpc::DeleteRangeRpc::client(&self.client.rpc_service);
         *client.options_mut() = self.rpc_options.clone();
 
@@ -271,9 +271,11 @@ impl<'a> RequestBuilder<'a> {
     }
 }
 
+#[pin_project]
 #[derive(Debug)]
 struct Response<T> {
     server: SocketAddr,
+    #[pin]
     inner: fibers_rpc::client::Response<Result<T>>,
 }
 impl<T> Response<T> {
@@ -282,11 +284,11 @@ impl<T> Response<T> {
     }
 }
 impl<T> Future for Response<T> {
-    type Item = T;
-    type Error = Error;
+    type Output = Result<T>;
 
-    fn poll(&mut self) -> Poll<Self::Item, Self::Error> {
-        match self.inner.poll() {
+    fn poll(self: Pin<&mut Self>, cx: &mut Context) -> Poll<Self::Output> {
+        let server = self.server.clone();
+        track!(self.project().inner.poll(cx)).map(|result| match result {
             Err(e) => {
                 let original_kind = *e.kind();
                 let kind = match original_kind {
@@ -295,10 +297,9 @@ impl<T> Future for Response<T> {
                     | fibers_rpc::ErrorKind::Unavailable
                     | fibers_rpc::ErrorKind::Other => ErrorKind::Other,
                 };
-                Err(track!(kind.takes_over(e); original_kind, self.server).into())
+                Err(track!(kind.takes_over(e); original_kind, server).into())
             }
-            Ok(Async::NotReady) => Ok(Async::NotReady),
-            Ok(Async::Ready(result)) => track!(result.map(Async::Ready); self.server),
-        }
+            Ok(result) => track!(result; server),
+        })
     }
 }

@@ -15,9 +15,10 @@ extern crate atomic_immut;
 extern crate bytecodec;
 extern crate cannyls;
 extern crate factory;
-extern crate fibers;
 extern crate fibers_rpc;
 extern crate futures;
+#[macro_use]
+extern crate pin_project;
 extern crate protobuf_codec;
 #[macro_use]
 extern crate slog;
