@@ -2,7 +2,7 @@ use atomic_immut::AtomicImmut;
 use cannyls::deadline::Deadline;
 use cannyls::device::{Device, DeviceHandle};
 use cannyls::{ErrorKind, Result};
-use futures::Future;
+use futures::{Future, FutureExt};
 use slog::Logger;
 use std::borrow::Borrow;
 use std::collections::HashMap;
@@ -172,7 +172,7 @@ impl Future for DeviceRegistry {
             if state.terminated {
                 continue;
             }
-            match track!(Pin::new(&mut state.device).poll(cx)) {
+            match track!(state.device.poll_unpin(cx)) {
                 Poll::Ready(Err(e)) => {
                     error!(logger, "Device {:?} terminated abnormally: {}", id, e);
                     state.terminated = true;
