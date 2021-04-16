@@ -1,5 +1,4 @@
 use fibers_rpc::server::{HandleCall, Reply, ServerBuilder};
-use futures::Future;
 
 use crate::protobuf::PutLumpRequestDecoderFactory;
 use crate::registry::DeviceRegistryHandle;
@@ -46,14 +45,14 @@ impl Server {
 impl HandleCall<rpc::GetLumpRpc> for Server {
     fn handle_call(&self, request: rpc::LumpRequest) -> Reply<rpc::GetLumpRpc> {
         let device = rpc_try!(self.registry.get_device(&request.device_id));
-        let future = request.options.with(&device).get(request.lump_id).then(Ok);
+        let future = request.options.with(&device).get(request.lump_id);
         Reply::future(future)
     }
 }
 impl HandleCall<rpc::HeadLumpRpc> for Server {
     fn handle_call(&self, request: rpc::LumpRequest) -> Reply<rpc::HeadLumpRpc> {
         let device = rpc_try!(self.registry.get_device(&request.device_id));
-        let future = request.options.with(&device).head(request.lump_id).then(Ok);
+        let future = request.options.with(&device).head(request.lump_id);
         Reply::future(future)
     }
 }
@@ -64,48 +63,35 @@ impl HandleCall<rpc::PutLumpRpc> for Server {
         let future = request
             .options
             .with(&device)
-            .put(request.lump_id, lump_data)
-            .then(Ok);
+            .put(request.lump_id, lump_data);
         Reply::future(future)
     }
 }
 impl HandleCall<rpc::DeleteLumpRpc> for Server {
     fn handle_call(&self, request: rpc::LumpRequest) -> Reply<rpc::DeleteLumpRpc> {
         let device = rpc_try!(self.registry.get_device(&request.device_id));
-        let future = request
-            .options
-            .with(&device)
-            .delete(request.lump_id)
-            .then(Ok);
+        let future = request.options.with(&device).delete(request.lump_id);
         Reply::future(future)
     }
 }
 impl HandleCall<rpc::ListLumpRpc> for Server {
     fn handle_call(&self, request: rpc::DeviceRequest) -> Reply<rpc::ListLumpRpc> {
         let device = rpc_try!(self.registry.get_device(&request.device_id));
-        let future = request.options.with(&device).list().then(Ok);
+        let future = request.options.with(&device).list();
         Reply::future(future)
     }
 }
 impl HandleCall<rpc::UsageRangeRpc> for Server {
     fn handle_call(&self, request: rpc::UsageRangeRequest) -> Reply<rpc::UsageRangeRpc> {
         let device = rpc_try!(self.registry.get_device(&request.device_id));
-        let future = request
-            .options
-            .with(&device)
-            .usage_range(request.range)
-            .then(Ok);
+        let future = request.options.with(&device).usage_range(request.range);
         Reply::future(future)
     }
 }
 impl HandleCall<rpc::DeleteRangeRpc> for Server {
     fn handle_call(&self, request: rpc::RangeLumpRequest) -> Reply<rpc::DeleteRangeRpc> {
         let device = rpc_try!(self.registry.get_device(&request.device_id));
-        let future = request
-            .options
-            .with(&device)
-            .delete_range(request.range)
-            .then(Ok);
+        let future = request.options.with(&device).delete_range(request.range);
         Reply::future(future)
     }
 }
